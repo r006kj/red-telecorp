@@ -85,5 +85,5 @@ bq query --use_legacy_sql=false 'SELECT * FROM `telecorp.v_alerta_predictiva`'
   consciente para la hackathon: evita gestionar tokens de GCP dentro de Lambda.
 - Si Gemini falla o tarda mas de 6 s, devuelve 502 y el Lambda guarda el reporte con el
   tipo del formulario (`fuente_ia = FORMULARIO`). Nunca se pierde un reporte por la IA.
-- `VERTEX_MODEL` es variable de entorno. Si `gemini-2.5-flash` no esta disponible en el
+- `VERTEX_MODEL` es variable de entorno. Si `gemini-3.8-flash` no esta disponible en el
   proyecto, revisa Model Garden y redespliega con otro nombre.

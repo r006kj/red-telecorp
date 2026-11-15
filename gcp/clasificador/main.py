@@ -18,6 +18,9 @@ TIPOS = ['SIN_SERVICIO', 'INTERNET_LENTO', 'LLAMADAS', 'SMS', 'COBERTURA', 'OTRO
 REGION = os.environ.get('VERTEX_REGION', 'us-central1')
 MODELO = os.environ.get('VERTEX_MODEL', 'gemini-2.5-flash')
 API_KEY = os.environ.get('API_KEY', '')
+# Si el proyecto no tiene acceso a los modelos en Vertex AI, se usa la API de Gemini
+# de AI Studio con una clave simple. El cuerpo de la peticion es identico.
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 TOPIC = os.environ.get('PUBSUB_TOPIC', 'telecorp-eventos')
 
 INSTRUCCION = (
@@ -52,8 +55,14 @@ def proyecto():
 
 
 def preguntar_a_gemini(descripcion, tipo_declarado):
-    url = ('https://' + REGION + '-aiplatform.googleapis.com/v1/projects/' + proyecto()
-           + '/locations/' + REGION + '/publishers/google/models/' + MODELO + ':generateContent')
+    if GEMINI_API_KEY:
+        url = ('https://generativelanguage.googleapis.com/v1beta/models/' + MODELO
+               + ':generateContent?key=' + GEMINI_API_KEY)
+        cabeceras = {'Content-Type': 'application/json'}
+    else:
+        url = ('https://' + REGION + '-aiplatform.googleapis.com/v1/projects/' + proyecto()
+               + '/locations/' + REGION + '/publishers/google/models/' + MODELO + ':generateContent')
+        cabeceras = {'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json'}
     cuerpo = {
         'systemInstruction': {'parts': [{'text': INSTRUCCION}]},
         'contents': [{'role': 'user', 'parts': [{'text':
@@ -74,8 +83,7 @@ def preguntar_a_gemini(descripcion, tipo_declarado):
         }
     }
     peticion = urllib.request.Request(
-        url, data=json.dumps(cuerpo).encode(), method='POST',
-        headers={'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json'})
+        url, data=json.dumps(cuerpo).encode(), method='POST', headers=cabeceras)
     with urllib.request.urlopen(peticion, timeout=6) as r:
         respuesta = json.loads(r.read())
     texto = respuesta['candidates'][0]['content']['parts'][0]['text']
@@ -132,7 +140,8 @@ def eventos():
 
 @app.get('/salud')
 def salud():
-    return jsonify({'ok': True, 'modelo': MODELO, 'region': REGION}), 200
+    return jsonify({'ok': True, 'modelo': MODELO, 'region': REGION,
+                    'via': 'ai-studio' if GEMINI_API_KEY else 'vertex'}), 200
 
 
 if __name__ == '__main__':

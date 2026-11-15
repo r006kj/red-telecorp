@@ -64,7 +64,7 @@ gcloud run deploy "$SERVICIO" \
   --source="$RAIZ/gcp/clasificador" \
   --region="$REGION" \
   --service-account="${SA_RUN}@${PROYECTO}.iam.gserviceaccount.com" \
-  --set-env-vars="GCP_PROJECT_ID=${PROYECTO},VERTEX_REGION=${REGION},VERTEX_MODEL=${VERTEX_MODEL:-gemini-2.5-flash},API_KEY=${API_KEY},PUBSUB_TOPIC=${TOPIC}" \
+  --set-env-vars="GCP_PROJECT_ID=${PROYECTO},VERTEX_REGION=${REGION},VERTEX_MODEL=${VERTEX_MODEL:-gemini-3.8-flash},API_KEY=${API_KEY},PUBSUB_TOPIC=${TOPIC},GEMINI_API_KEY=${GEMINI_API_KEY:-}" \
   --allow-unauthenticated \
   --min-instances=0 \
   --max-instances=5 \
