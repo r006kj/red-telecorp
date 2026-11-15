@@ -1,0 +1,11 @@
+{
+    "dni": "71234567",
+    "nombre": "Ana Torres",
+    "numero_servicio": "987654321",
+    "email": "ana.torres@utec.edu.pe",
+    "telefono": "987654321",
+    "zona_id": "Z-JESUSMARIA",
+    "fecha_hora": "2026-11-15T10:30",
+    "tipo_problema": "SIN_SERVICIO",
+    "descripcion": "No tengo señal desde las 10 de la mañana"
+}

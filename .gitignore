@@ -1,0 +1,11 @@
+# Credenciales: NUNCA al repo
+gcp-key.json
+gcp-salida.env
+.env
+# Generado
+frontend/config.js
+api-telecorp/node_modules/
+api-telecorp/.serverless/
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,17 @@
+# POST /incidente/accion  (header Authorization: <IdToken de Cognito>)
+{
+    "incidente_id": "INC-3F9A2C71",
+    "accion": "confirmar"
+}
+
+# POST /antena/simular
+{
+    "antena_id": "ANT-SANISIDRO-1",
+    "modo": "inhabilitada"
+}
+
+# POST /reporte/actualizar
+{
+    "reporte_id": "REP-1A2B3C4D",
+    "estado": "EN_ATENCION"
+}

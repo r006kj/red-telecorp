@@ -1,0 +1,4 @@
+{
+    "reporte_id": "REP-1A2B3C4D",
+    "dni": "71234567"
+}
