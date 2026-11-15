@@ -3,96 +3,147 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Red TeleCorp | Reporta una incidencia</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="estilos.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js"></script>
+  <script src="comun.js"></script>
 </head>
 <body>
-<header><h1>Red TeleCorp · Incidencias</h1><a href="operador.html">Panel de operadores</a></header>
+<header>
+  <div class="marca"><span class="marca-senal" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Red TeleCorp</div>
+  <nav class="nav"><a href="operador.html">Soy operador</a></nav>
+</header>
 <main>
-  <section class="tarjeta">
-    <h2>Reportar un problema con tu servicio</h2>
-    <form id="form">
-      <div class="grid">
-        <div><label>DNI</label><input name="dni" required pattern="[0-9]{8}" placeholder="12345678"></div>
-        <div><label>Nombre completo</label><input name="nombre" required></div>
-        <div><label>Número del servicio</label><input name="numero_servicio" required placeholder="987654321"></div>
-        <div><label>Correo</label><input name="email" type="email" placeholder="tu@correo.com"></div>
-        <div><label>Celular para avisos (SMS)</label><input name="telefono" placeholder="987654321"></div>
-        <div><label>Zona</label><select name="zona_id" id="zonas" required></select></div>
-        <div><label>Fecha y hora del problema</label><input name="fecha_hora" type="datetime-local" required></div>
-        <div><label>Tipo de problema</label>
-          <select name="tipo_problema" required>
-            <option value="SIN_SERVICIO">Sin servicio</option><option value="INTERNET_LENTO">Internet lento</option>
-            <option value="LLAMADAS">Llamadas</option><option value="SMS">Mensajes (SMS)</option>
-            <option value="COBERTURA">Cobertura</option><option value="OTRO">Otro</option>
-          </select></div>
-      </div>
-      <p><label>Describe lo que pasó</label><textarea name="descripcion" required maxlength="1000"></textarea></p>
-      <p><button type="button" class="sec" id="ubicacion">Usar mi ubicación aproximada</button>
-         <span id="coords" class="msg"></span></p>
-      <button type="submit">Enviar reporte</button>
-      <div id="resultado" class="msg"></div>
-    </form>
+  <section class="portada">
+    <div>
+      <h1>¿Se cayó tu señal? Cuéntanos dónde y qué pasó.</h1>
+      <p>Juntamos los reportes de cada zona: si tus vecinos tienen el mismo problema, lo atendemos como una falla de la red y te avisamos cómo avanza.</p>
+    </div>
   </section>
 
-  <section class="tarjeta">
-    <h2>Consultar el estado de mi reporte</h2>
-    <div class="grid">
-      <div><label>Código de reporte</label><input id="cId" placeholder="REP-XXXXXXXX"></div>
-      <div><label>DNI</label><input id="cDni"></div>
-      <div style="align-self:end"><button id="consultar">Consultar</button></div>
-    </div>
-    <div id="estado" class="msg"></div>
-  </section>
+  <div class="grid g2">
+    <section class="bloque">
+      <h2>Reportar un problema</h2>
+      <p class="sub">Los campos con * son obligatorios. Necesitamos un correo o un celular para avisarte.</p>
+      <form id="form">
+        <div class="campos">
+          <div><label>DNI *</label><input name="dni" required pattern="[0-9]{8}" placeholder="12345678"></div>
+          <div><label>Nombre completo *</label><input name="nombre" required></div>
+          <div><label>Número del servicio *</label><input name="numero_servicio" required placeholder="987654321"></div>
+          <div><label>Correo</label><input name="email" type="email" placeholder="tu@correo.com"></div>
+          <div><label>Celular para SMS</label><input name="telefono" placeholder="987654321"></div>
+          <div><label>Fecha y hora *</label><input name="fecha_hora" type="datetime-local" required></div>
+          <div><label>Tipo de problema *</label>
+            <select name="tipo_problema" required>
+              <option value="SIN_SERVICIO">Sin servicio</option><option value="INTERNET_LENTO">Internet lento</option>
+              <option value="LLAMADAS">Llamadas</option><option value="SMS">Mensajes (SMS)</option>
+              <option value="COBERTURA">Cobertura</option><option value="OTRO">Otro</option>
+            </select></div>
+          <div><label>Zona *</label><select name="zona_id" id="zonas" required></select></div>
+        </div>
+        <label>¿Dónde estás? Toca el mapa o usa tu ubicación</label>
+        <div id="mapaReporte"></div>
+        <p class="sub" style="margin:8px 0 12px"><button type="button" class="sec chico" id="gps">Usar mi ubicación</button> <span id="coords">Sin ubicación</span></p>
+        <label>Describe lo que pasó *</label>
+        <textarea name="descripcion" required maxlength="1000" placeholder="Ej.: desde las 10 a. m. no tengo internet ni puedo llamar"></textarea>
+        <p style="margin-top:16px"><button type="submit" id="enviar">Enviar reporte</button></p>
+        <div id="resultado" class="msg"></div>
+      </form>
+    </section>
+
+    <section class="bloque">
+      <div class="fila"><h2>Sigue tu reporte</h2><span id="vivo" class="badge oculto vivo">En vivo</span></div>
+      <p class="sub">Se actualiza solo cada 5 segundos.</p>
+      <div class="campos">
+        <div><label>Código de reporte</label><input id="cId" placeholder="REP-XXXXXXXX"></div>
+        <div><label>DNI</label><input id="cDni"></div>
+      </div>
+      <button id="seguir">Ver avance</button>
+      <div id="seguimiento" class="msg"></div>
+    </section>
+  </div>
 </main>
 <script>
-const API = window.CONFIG.API_URL;
 const form = document.getElementById("form");
-// Igual que el taller: integration lambda, el statusCode viene dentro del JSON
-async function post(ruta, cuerpo) {
-  const r = await fetch(`${API}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
-  return r.json();
+const ahoraLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+form.fecha_hora.value = ahoraLocal;
+let lat = "", lon = "", marcador = null, temporizador = null, ultimoEstado = null;
+
+// Mapa para elegir la ubicacion: el clic sugiere la zona mas cercana
+const mapa = crearMapa("mapaReporte", 11);
+for (const [id, pos] of Object.entries(ZONAS_GEO)) {
+  L.circle(pos, { radius: 1200, color: "#00788A", weight: 1, fillOpacity: 0.08 }).addTo(mapa);
 }
-let lat = "", lon = "";
-form.fecha_hora.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function fijarUbicacion(la, lo) {
+  lat = la.toFixed(5); lon = lo.toFixed(5);
+  if (marcador) marcador.setLatLng([la, lo]); else marcador = L.circleMarker([la, lo], { radius: 9, color: "#fff", weight: 2, fillColor: "#F2B705", fillOpacity: 1 }).addTo(mapa);
+  const zona = zonaCercana(la, lo);
+  if (zona) form.zona_id.value = zona;
+  document.getElementById("coords").textContent = `Zona sugerida: ${form.zona_id.selectedOptions[0]?.textContent || zona} (${lat}, ${lon})`;
+}
+mapa.on("click", e => fijarUbicacion(e.latlng.lat, e.latlng.lng));
+document.getElementById("gps").onclick = () => navigator.geolocation.getCurrentPosition(
+  p => { fijarUbicacion(p.coords.latitude, p.coords.longitude); mapa.setView([p.coords.latitude, p.coords.longitude], 13); },
+  () => toast("No pudimos obtener tu ubicación. Toca el mapa para marcarla.", "#D99A00"));
 
-post("/zona/listar", {}).then(j => {
-  document.getElementById("zonas").innerHTML = j.zonas.map(z => `<option value="${z.zona_id}">${z.nombre}</option>`).join("");
-});
-
-document.getElementById("ubicacion").onclick = () => navigator.geolocation.getCurrentPosition(p => {
-  lat = p.coords.latitude.toFixed(4); lon = p.coords.longitude.toFixed(4);
-  document.getElementById("coords").textContent = `(${lat}, ${lon})`;
-});
+post("/zona/listar").then(j => {
+  const sel = document.getElementById("zonas");
+  j.zonas.forEach(z => { const o = el("option", z.nombre); o.value = z.zona_id; sel.appendChild(o); });
+}).catch(e => toast("No se pudieron cargar las zonas: " + e.message, "#C8102E"));
 
 form.onsubmit = async (e) => {
   e.preventDefault();
-  const out = document.getElementById("resultado");
-  const datos = Object.fromEntries(new FormData(form));
-  Object.assign(datos, { lat, lon });
-  out.className = "msg"; out.textContent = "Enviando...";
-  const j = await post("/reporte/crear", datos);
-  if (j.statusCode >= 400) { out.className = "msg error"; out.textContent = j.error || "Error al enviar"; return; }
-  out.className = "msg exito";
-  out.textContent = `${j.mensaje} Código: ${j.reporte_id}`;
-  document.getElementById("cId").value = j.reporte_id; document.getElementById("cDni").value = datos.dni;
+  const out = document.getElementById("resultado"), btn = document.getElementById("enviar");
+  const datos = Object.assign(Object.fromEntries(new FormData(form)), { lat, lon });
+  if (!datos.email && !datos.telefono) { out.className = "msg error"; out.textContent = "Indica un correo o un celular para avisarte."; return; }
+  btn.disabled = true; out.className = "msg"; out.replaceChildren(el("span", null, "cargando"), document.createTextNode(" Enviando reporte"));
+  try {
+    const j = await post("/reporte/crear", datos);
+    out.className = "msg exito"; out.textContent = `Reporte enviado. Tu código es ${j.reporte_id}.`;
+    toast("Reporte enviado: " + j.reporte_id, "#1E9E5A");
+    document.getElementById("cId").value = j.reporte_id; document.getElementById("cDni").value = datos.dni;
+    try { localStorage.setItem("telecorp_ultimo", JSON.stringify({ id: j.reporte_id, dni: datos.dni })); } catch (_) {}
+    iniciarSeguimiento();
+  } catch (err) { out.className = "msg error"; out.textContent = err.message; }
+  btn.disabled = false;
 };
 
-document.getElementById("consultar").onclick = async () => {
-  const out = document.getElementById("estado");
+// Seguimiento: consulta cada 5 s y avisa cuando cambia el estado
+const ESTADOS = ["REGISTRADA", "EN_REVISION", "EN_ATENCION", "SOLUCIONADA", "CERRADA"];
+const ETIQUETAS = ["Registrada", "En revisión", "En atención", "Solucionada", "Cerrada"];
+async function consultar() {
   const id = document.getElementById("cId").value.trim(), dni = document.getElementById("cDni").value.trim();
-  const j = await post("/reporte/consultar", { reporte_id: id, dni: dni });
-  if (j.statusCode >= 400) { out.className = "msg error"; out.textContent = j.error; return; }
-  const rep = j.reporte;
-  out.className = "msg";
-  out.replaceChildren();
-  const h = document.createElement("p");
-  h.innerHTML = `<b>Estado:</b> <span class="badge"></span> · <b>Tipo (IA):</b> <span></span> · <b>Zona:</b> <span></span>`;
-  const s = h.querySelectorAll("span"); s[0].textContent = rep.estado; s[1].textContent = rep.tipo_ia || rep.tipo_problema; s[2].textContent = rep.zona;
-  const ol = document.createElement("ol"); ol.className = "linea";
-  rep.historial.forEach(x => { const li = document.createElement("li"); li.textContent = `${x.fecha} · ${x.estado} ${x.detalle ? "— " + x.detalle : ""}`; ol.appendChild(li); });
-  out.append(h, ol);
-};
+  const caja = document.getElementById("seguimiento");
+  try {
+    const rep = (await post("/reporte/consultar", { reporte_id: id, dni: dni })).reporte;
+    if (ultimoEstado && rep.estado !== ultimoEstado) toast(`Tu reporte avanzó: ${ETIQUETAS[ESTADOS.indexOf(rep.estado)] || rep.estado}`, "#1E9E5A", 7000);
+    ultimoEstado = rep.estado;
+    const cab = el("div", null, "fila");
+    cab.append(el("b", rep.reporte_id), badge(rep.estado));
+    const info = el("div", null, "datos");
+    [["Zona", rep.zona], ["Problema detectado", (rep.tipo_ia || rep.tipo_problema || "").replaceAll("_", " ").toLowerCase()], ["Incidente de zona", rep.incidente_id || "ninguno todavía"]]
+      .forEach(([k, v]) => { const s = el("span", k + ": "); s.appendChild(el("b", v)); info.appendChild(s); });
+    caja.className = "msg";
+    caja.replaceChildren(cab, etapas(ESTADOS, rep.estado, ETIQUETAS), info, lineaTiempo(rep.historial));
+    if (rep.estado === "CERRADA") detener();
+  } catch (err) {
+    caja.className = "msg";
+    caja.replaceChildren(el("span", null, "cargando"), document.createTextNode(" Estamos registrando tu reporte. Si acabas de enviarlo, aparecerá en unos segundos."));
+  }
+}
+function iniciarSeguimiento() {
+  detener(); ultimoEstado = null; consultar();
+  temporizador = setInterval(consultar, 5000);
+  document.getElementById("vivo").classList.remove("oculto");
+}
+function detener() { clearInterval(temporizador); document.getElementById("vivo").classList.add("oculto"); }
+document.getElementById("seguir").onclick = iniciarSeguimiento;
+
+try {
+  const u = JSON.parse(localStorage.getItem("telecorp_ultimo") || "null");
+  if (u) { document.getElementById("cId").value = u.id; document.getElementById("cDni").value = u.dni; }
+} catch (_) {}
 </script>
 </body>
 </html>

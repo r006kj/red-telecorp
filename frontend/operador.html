@@ -2,68 +2,102 @@
 <html lang="es">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Red TeleCorp | Panel de operadores</title>
+  <title>Red TeleCorp | Centro de operaciones</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="estilos.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
   <script src="config.js"></script>
+  <script src="comun.js"></script>
 </head>
 <body>
-<header><h1>Red TeleCorp · Panel de operadores</h1><a href="index.html">Portal de usuarios</a></header>
+<header>
+  <div class="marca"><span class="marca-senal" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Red TeleCorp<small>Centro de operaciones</small></div>
+  <nav class="nav">
+    <span id="wsEstado" class="badge muerto">Sin conexión</span>
+    <span id="actualizado" class="sub"></span>
+    <a href="index.html">Portal de clientes</a>
+    <button class="sec chico oculto" id="salir">Salir</button>
+  </nav>
+</header>
+
 <main>
-  <section class="tarjeta" id="login">
+  <section class="bloque login" id="login">
     <h2>Iniciar sesión</h2>
-    <div class="grid">
-      <div><label>Correo</label><input id="usuario" type="email"></div>
+    <div class="campos" style="grid-template-columns:1fr">
+      <div><label>Correo</label><input id="usuario" type="email" value="operador@telecorp.pe"></div>
       <div><label>Contraseña</label><input id="clave" type="password"></div>
-      <div style="align-self:end"><button id="entrar">Entrar</button></div>
     </div>
+    <button id="entrar" style="width:100%">Entrar</button>
     <div id="loginMsg" class="msg error"></div>
   </section>
 
   <div id="panel" class="oculto">
-    <section class="tarjeta">
-      <h2>Eventos en tiempo real <span id="wsEstado" class="badge">desconectado</span></h2>
-      <div id="feed"></div>
+    <section class="franja" aria-label="Estado de la red">
+      <div class="indicador"><div class="valor" id="kActivos">0</div><div class="etq">incidentes abiertos</div></div>
+      <div class="indicador"><div class="valor" id="kCriticos">0</div><div class="etq">de prioridad alta o crítica</div></div>
+      <div class="indicador"><div class="valor" id="kAntenas">0</div><div class="etq">antenas fuera de rango</div></div>
+      <div class="indicador"><div class="valor" id="kReportes">0</div><div class="etq">reportes de clientes hoy</div></div>
+      <div class="indicador"><div class="valor" id="kUsuarios">0</div><div class="etq">clientes afectados ahora</div></div>
     </section>
 
-    <section class="tarjeta">
-      <h2>Incidentes de zona</h2>
-      <table><thead><tr><th>Incidente</th><th>Zona</th><th>Origen</th><th>Estado</th><th>Prioridad</th><th>Usuarios</th><th>Antena</th><th>Acción</th></tr></thead>
-        <tbody id="tIncidentes"></tbody></table>
+    <div class="grid g2">
+      <section class="bloque">
+        <h2>Mapa de la red</h2>
+        <p class="sub">Toca una antena para ver su tráfico o simular una falla.</p>
+        <div id="mapa"></div>
+        <div class="leyenda">
+          <span class="badge NORMAL">Normal</span><span class="badge SATURADA">Saturada</span>
+          <span class="badge CAIDA">Caída</span><span class="badge INHABILITADA">Inhabilitada</span>
+        </div>
+      </section>
+      <section class="bloque">
+        <h2>Lo que está pasando</h2>
+        <p class="sub">Cambios de antenas e incidentes, al instante.</p>
+        <div id="feed"><div class="sub">Sin novedades desde que abriste el panel.</div></div>
+      </section>
+    </div>
+
+    <div class="grid g2" style="margin-top:24px">
+      <section class="bloque">
+        <h2>Tráfico por antena</h2>
+        <p class="sub">GB por minuto. Bajo 60 es caída; sobre 129, saturación.</p>
+        <div style="height:280px"><canvas id="gTrafico"></canvas></div>
+      </section>
+      <section class="bloque">
+        <h2>Incidentes abiertos por prioridad</h2>
+        <p class="sub">Prioridad = clientes afectados × severidad × tipo de zona.</p>
+        <div style="height:280px"><canvas id="gPrioridad"></canvas></div>
+      </section>
+    </div>
+
+    <section class="bloque" style="margin-top:24px">
+      <div class="fila"><h2>Incidentes de zona</h2><span class="sub" id="nInc"></span></div>
+      <div id="incidentes"></div>
     </section>
 
-    <section class="tarjeta">
-      <h2>Antenas (control de simulación)</h2>
-      <table><thead><tr><th>Antena</th><th>Zona</th><th>Estado</th><th>GB/min</th><th>Recurrencia</th><th>Forzar modo</th></tr></thead>
-        <tbody id="tAntenas"></tbody></table>
-    </section>
-
-    <section class="tarjeta">
-      <h2>Reportes de usuarios</h2>
-      <table><thead><tr><th>Reporte</th><th>Usuario</th><th>Zona</th><th>Tipo (IA)</th><th>Resumen IA</th><th>Estado</th></tr></thead>
-        <tbody id="tReportes"></tbody></table>
+    <section class="bloque" style="margin-top:24px">
+      <h2>Reportes de clientes</h2>
+      <p class="sub">Los 100 más recientes. Cambia el estado para avisar al cliente.</p>
+      <div class="scroll">
+        <table class="tabla"><thead><tr><th>Reporte</th><th>Cliente</th><th>Zona</th><th>Problema (clasificado por IA)</th><th>Estado</th></tr></thead>
+          <tbody id="tReportes"></tbody></table>
+      </div>
     </section>
   </div>
 </main>
 <script>
-const C = window.CONFIG;
 let token = sessionStorage.getItem("token");
+let mapa, capaAntenas, capaZonas, gTrafico, gPrioridad, recarga;
+let NOMBRES = {};
+const MODOS = ["normal", "caida", "saturada", "inhabilitada"];
+const ACTIVO = i => !["CERRADO", "DESCARTADO", "VENCIDO"].includes(i.estado);
+const api = (ruta, cuerpo) => post(ruta, cuerpo, token).catch(e => { if (e.sesion) salir(); throw e; });
 
-// Crea elementos sin innerHTML para no inyectar texto de usuarios como HTML.
-function el(tag, texto, clase) { const e = document.createElement(tag); if (texto !== undefined && texto !== null) e.textContent = texto; if (clase) e.className = clase; return e; }
-function fila(celdas) { const tr = el("tr"); celdas.forEach(c => { const td = el("td"); if (c instanceof Node) td.appendChild(c); else td.textContent = c ?? ""; tr.appendChild(td); }); return tr; }
-function badge(v) { return el("span", v || "-", "badge " + (v || "")); }
-
-// Todas las rutas son POST con integration lambda: el statusCode viene dentro del JSON
-async function api(ruta, cuerpo = {}) {
-  const r = await fetch(`${C.API_URL}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: token }, body: JSON.stringify(cuerpo) });
-  if (r.status === 401 || r.status === 403) { sessionStorage.removeItem("token"); location.reload(); }
-  const j = await r.json();
-  if (j.statusCode >= 400 || j.message) throw new Error(j.error || j.message || "Error");
-  return j;
-}
-
+// ---------- Login con Cognito ----------
 document.getElementById("entrar").onclick = async () => {
   const msg = document.getElementById("loginMsg");
+  msg.textContent = "";
   const r = await fetch(`https://cognito-idp.${C.REGION}.amazonaws.com/`, {
     method: "POST",
     headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
@@ -74,66 +108,219 @@ document.getElementById("entrar").onclick = async () => {
   if (!j.AuthenticationResult) { msg.textContent = j.message || "No se pudo iniciar sesión"; return; }
   token = j.AuthenticationResult.IdToken; sessionStorage.setItem("token", token); iniciar();
 };
+document.getElementById("clave").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("entrar").click(); });
+function salir() { sessionStorage.removeItem("token"); location.reload(); }
+document.getElementById("salir").onclick = salir;
 
-async function cargar() {
-  const [ji, ja, jr] = await Promise.all([api("/incidente/listar"), api("/antena/listar"), api("/reporte/listar")]);
-  const incidentes = ji.incidentes, antenas = ja.antenas, reportes = jr.reportes;
-
-  const ti = document.getElementById("tIncidentes"); ti.replaceChildren();
-  incidentes.forEach(i => {
-    const acciones = el("div");
-    const boton = (txt, accion, clase) => { const b = el("button", txt, clase); b.onclick = () => accionar(i.incidente_id, accion); acciones.appendChild(b); acciones.appendChild(document.createTextNode(" ")); };
-    if (i.fase === "VERIFICACION") { boton("Confirmar", "confirmar", "ok"); boton("Descartar", "descartar", "mal"); }
-    else if (i.fase === "RESOLUCION") { boton("Marcar resuelto", "resolver", "ok"); }
-    else acciones.textContent = i.fase || "—";
-    ti.appendChild(fila([i.incidente_id, i.zona_nombre, i.origen, badge(i.estado), badge(i.prioridad),
-      Math.max(i.usuarios_reportantes || 0, i.usuarios_estimados || 0), i.antena_id, acciones]));
-  });
-
-  const ta = document.getElementById("tAntenas"); ta.replaceChildren();
+// ---------- Mapa ----------
+function prepararMapa() {
+  mapa = crearMapa("mapa", 12);
+  capaZonas = L.layerGroup().addTo(mapa);
+  capaAntenas = L.layerGroup().addTo(mapa);
+}
+function dibujarMapa(antenas, incidentes) {
+  capaZonas.clearLayers(); capaAntenas.clearLayers();
+  const activos = incidentes.filter(ACTIVO);
+  for (const [zona, pos] of Object.entries(ZONAS_GEO)) {
+    const inc = activos.find(i => i.zona_id === zona);
+    const color = inc ? (COLOR_PRIORIDAD[inc.prioridad] || "#C8102E") : "#00788A";
+    const circulo = L.circle(pos, { radius: 1300, color, weight: inc ? 2 : 1, fillOpacity: inc ? 0.22 : 0.06,
+      className: inc ?"pulso" : "" }).addTo(capaZonas);
+    const pop = el("div");
+    pop.appendChild(el("b", NOMBRES[zona] || zona));
+    if (inc) { pop.appendChild(el("div", `Incidente ${inc.incidente_id}`)); pop.appendChild(badge(inc.prioridad)); }
+    else pop.appendChild(el("div", "Sin incidentes abiertos", "sub"));
+    circulo.bindPopup(pop);
+  }
   antenas.forEach(a => {
-    const sel = el("select");
-    ["normal", "caida", "saturada", "inhabilitada"].forEach(m => { const o = el("option", m); o.value = m; if (m === a.modo_simulacion) o.selected = true; sel.appendChild(o); });
-    sel.onchange = () => api("/antena/simular", { antena_id: a.antena_id, modo: sel.value }).then(() => log(`Modo de ${a.antena_id} -> ${sel.value}`));
-    ta.appendChild(fila([a.antena_id, a.zona_id, badge(a.estado), a.ultimo_gb, a.requiere_revision ? badge("CRITICA") : "—", sel]));
-    if (a.requiere_revision) ta.lastChild.children[4].firstChild.textContent = `Revisión (${a.fallas_7d} fallas/7d)`;
+    const color = COLOR_ESTADO[a.estado] || "#64748b";
+    const m = L.circleMarker(posicionAntena(a), { radius: a.estado === "NORMAL" ? 7 : 11, color: "#FFFFFF", weight: 2,
+      fillColor: color, fillOpacity: 1, className: a.estado === "NORMAL" ? "" : "pulso" }).addTo(capaAntenas);
+    m.bindTooltip(`${a.antena_id}: ${a.ultimo_gb ?? "sin dato"} GB/min`);
+    m.bindPopup(() => popupAntena(a));
   });
+}
+function popupAntena(a) {
+  const caja = el("div", null, null, "min-width:200px");
+  caja.appendChild(el("b", a.antena_id));
+  const fila = el("div", null, null, "margin:6px 0"); fila.append(badge(a.estado), document.createTextNode(` ${a.ultimo_gb ?? "sin dato"} GB/min`));
+  caja.appendChild(fila);
+  if (a.requiere_revision) caja.appendChild(el("div", `Falla recurrente: ${a.fallas_7d} caídas en 7 días. Requiere revisión técnica.`, null, "color:#C8102E;font-size:13px"));
+  caja.appendChild(el("div", "Simular estado:", "sub", "margin:8px 0 4px"));
+  const botones = el("div", null, null, "display:flex;flex-wrap:wrap;gap:4px");
+  MODOS.forEach(modo => {
+    const b = el("button", modo, "chico " + (modo === a.modo_simulacion ? "" : "sec"));
+    b.onclick = async () => {
+      try { await api("/antena/simular", { antena_id: a.antena_id, modo }); toast(`${a.antena_id} pasará a ${modo} en la próxima medición (máximo 1 minuto).`, "#00788A"); mapa.closePopup(); }
+      catch (e) { toast(e.message, "#C8102E"); }
+    };
+    botones.appendChild(b);
+  });
+  caja.appendChild(botones);
+  return caja;
+}
 
-  const tr = document.getElementById("tReportes"); tr.replaceChildren();
+// ---------- Graficos ----------
+function prepararGraficos() {
+  Chart.defaults.color = "#5A6B80"; Chart.defaults.borderColor = "#E3E9EF"; Chart.defaults.font.family = "Barlow, sans-serif"; Chart.defaults.font.size = 13;
+  gTrafico = new Chart(document.getElementById("gTrafico"), {
+    data: { labels: [], datasets: [
+      { type: "bar", label: "GB/min", data: [], backgroundColor: [], borderRadius: 2 },
+      { type: "line", label: "Límite de caída (60)", data: [], borderColor: "#DD5F1A", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 },
+      { type: "line", label: "Límite de saturación (129)", data: [], borderColor: "#D99A00", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 }
+    ] },
+    options: { maintainAspectRatio: false, animation: { duration: 800 }, plugins: { legend: { position: "bottom" } },
+      scales: { y: { beginAtZero: true, suggestedMax: 180 }, x: { ticks: { maxRotation: 60, minRotation: 45, font: { size: 10 } } } } }
+  });
+  gPrioridad = new Chart(document.getElementById("gPrioridad"), {
+    type: "doughnut",
+    data: { labels: ["Crítica", "Alta", "Media", "Baja"], datasets: [{ data: [0, 0, 0, 0],
+      backgroundColor: ["#C8102E", "#DD5F1A", "#D99A00", "#1E9E5A"], borderColor: "#FFFFFF", borderWidth: 3 }] },
+    options: { maintainAspectRatio: false, cutout: "62%", plugins: { legend: { position: "bottom" } } }
+  });
+}
+function actualizarGraficos(antenas, incidentes) {
+  gTrafico.data.labels = antenas.map(a => a.antena_id.replace("ANT-", ""));
+  gTrafico.data.datasets[0].data = antenas.map(a => a.ultimo_gb ?? 0);
+  gTrafico.data.datasets[0].backgroundColor = antenas.map(a => COLOR_ESTADO[a.estado] || "#5A6B80");
+  gTrafico.data.datasets[1].data = antenas.map(() => 60);
+  gTrafico.data.datasets[2].data = antenas.map(() => 129);
+  gTrafico.update();
+  const activos = incidentes.filter(ACTIVO);
+  gPrioridad.data.datasets[0].data = ["CRITICA", "ALTA", "MEDIA", "BAJA"].map(p => activos.filter(i => i.prioridad === p).length);
+  gPrioridad.update();
+}
+
+// ---------- KPIs ----------
+function actualizarKpis(antenas, incidentes, reportes) {
+  const activos = incidentes.filter(ACTIVO);
+  const hoy = new Date().toISOString().slice(0, 10);
+  animarNumero(document.getElementById("kActivos"), activos.length);
+  animarNumero(document.getElementById("kCriticos"), activos.filter(i => ["CRITICA", "ALTA"].includes(i.prioridad)).length);
+  animarNumero(document.getElementById("kAntenas"), antenas.filter(a => a.estado !== "NORMAL").length);
+  animarNumero(document.getElementById("kReportes"), reportes.filter(r => (r.creado || "").startsWith(hoy)).length);
+  animarNumero(document.getElementById("kUsuarios"), activos.reduce((s, i) => s + Math.max(i.usuarios_reportantes || 0, i.usuarios_estimados || 0), 0));
+  document.getElementById("kActivos").parentElement.classList.toggle("alerta", activos.length > 0);
+}
+
+// ---------- Incidentes ----------
+const ETAPAS_INC = ["DETECTADO", "EN_EVALUACION", "IDENTIFICADO", "RESTABLECIDO", "CERRADO"];
+const ETIQ_INC = ["Detectado", "En evaluación", "Falla identificada", "Servicio restablecido", "Cerrado"];
+function dibujarIncidentes(incidentes) {
+  const cont = document.getElementById("incidentes");
+  cont.replaceChildren();
+  document.getElementById("nInc").textContent = `${incidentes.filter(ACTIVO).length} abiertos, ${incidentes.length} en total`;
+  if (!incidentes.length) { cont.appendChild(el("div", "No hay incidentes. Cuando una antena falle o 10 clientes de una zona reporten, aparecerán aquí.", "sub")); return; }
+  incidentes.slice(0, 30).forEach(i => {
+    const tarjeta = el("div", "", "incidente" + (ACTIVO(i) && i.prioridad === "CRITICA" ? " urgente" : ""));
+    tarjeta.style.setProperty("--c", COLOR_PRIORIDAD[i.prioridad] || "#5A6B80");
+    const cab = el("div", null, "fila");
+    const titulo = el("h3", i.zona_nombre || i.zona_id); titulo.appendChild(el("span", i.incidente_id));
+    const insignias = el("div", null, null, "display:flex;gap:6px"); insignias.append(badge(i.prioridad), badge(i.estado));
+    cab.append(titulo, insignias);
+    const datos = el("div", null, "datos");
+    [["Detectado por", i.origen === "ANTENA" ? "la antena" : "reportes de clientes"], ["Antena", i.antena_id || "sin falla"], ["Severidad", (i.severidad || "sin dato").toLowerCase()],
+     ["Clientes afectados", Math.max(i.usuarios_reportantes || 0, i.usuarios_estimados || 0)], ["Inicio", hora(i.inicio)],
+     ["Duración", i.duracion_min != null ? i.duracion_min + " min" : "en curso"]]
+      .forEach(([k, v]) => { const s = el("span", k + ": "); s.appendChild(el("b", String(v))); datos.appendChild(s); });
+    const estadoEtapa = ETAPAS_INC.includes(i.estado) ? i.estado : (["DESCARTADO", "VENCIDO"].includes(i.estado) ? "CERRADO" : "DETECTADO");
+    const acciones = el("div", null, null, "display:flex;gap:8px;margin-top:10px;flex-wrap:wrap");
+    const accion = (texto, nombre, clase) => {
+      const b = el("button", texto, "chico " + clase);
+      b.onclick = async () => {
+        b.disabled = true;
+        try { await api("/incidente/accion", { incidente_id: i.incidente_id, accion: nombre }); toast(`${texto}: ${i.incidente_id}`, "#1E9E5A"); programarRecarga(1200); }
+        catch (e) { toast(e.message, "#C8102E"); b.disabled = false; }
+      };
+      acciones.appendChild(b);
+    };
+    if (i.fase === "VERIFICACION") { acciones.appendChild(el("span", "Las antenas están bien. ¿Confirmas la falla?", "espera")); accion("Confirmar falla", "confirmar", "ok"); accion("Descartar", "descartar", "mal"); }
+    if (i.fase === "RESOLUCION") { acciones.appendChild(el("span", "Se cerrará solo cuando la antena se recupere.", "espera")); accion("Marcar como resuelto", "resolver", "ok"); }
+    const det = el("details"); det.appendChild(el("summary", "Historial del incidente")); det.appendChild(lineaTiempo(i.historial));
+    tarjeta.append(cab, etapas(ETAPAS_INC, estadoEtapa, ETIQ_INC), datos, acciones, det);
+    cont.appendChild(tarjeta);
+  });
+}
+
+// ---------- Reportes ----------
+const ESTADOS_REP = ["REGISTRADA", "EN_REVISION", "EN_ATENCION", "SOLUCIONADA", "CERRADA"];
+function dibujarReportes(reportes) {
+  const tb = document.getElementById("tReportes");
+  const previos = new Set([...tb.querySelectorAll("tr")].map(tr => tr.dataset.id));
+  tb.replaceChildren();
   reportes.slice(0, 100).forEach(r => {
+    const tr = el("tr"); tr.dataset.id = r.reporte_id;
+    if (previos.size && !previos.has(r.reporte_id)) tr.classList.add("destello");
     const sel = el("select");
-    ["REGISTRADA", "EN_REVISION", "EN_ATENCION", "SOLUCIONADA", "CERRADA"].forEach(s => { const o = el("option", s); o.value = s; if (s === r.estado) o.selected = true; sel.appendChild(o); });
-    sel.onchange = () => api("/reporte/actualizar", { reporte_id: r.reporte_id, estado: sel.value }).then(() => log(`${r.reporte_id} -> ${sel.value}`));
-    tr.appendChild(fila([r.reporte_id, `${r.nombre} (${r.dni})`, r.zona_nombre, `${r.tipo_ia} · ${r.fuente_ia}`, r.resumen_ia, sel]));
+    ESTADOS_REP.forEach(s => { const o = el("option", nombreEstado(s)); o.value = s; o.selected = s === r.estado; sel.appendChild(o); });
+    sel.onchange = () => api("/reporte/actualizar", { reporte_id: r.reporte_id, estado: sel.value })
+      .then(() => toast(`Se avisó al cliente: ${r.reporte_id} ahora está ${nombreEstado(sel.value).toLowerCase()}`, "#00788A")).catch(e => toast(e.message, "#C8102E"));
+    [r.reporte_id, r.nombre, r.zona_nombre].forEach(v => tr.appendChild(el("td", v)));
+    tr.children[1].appendChild(el("small", "DNI " + r.dni));
+    const prob = el("td", (r.tipo_ia || r.tipo_problema || "").replaceAll("_", " ").toLowerCase());
+    prob.appendChild(el("small", r.resumen_ia || (r.fuente_ia === "GEMINI" ? "" : "Sin clasificación de IA; se usó el tipo del formulario")));
+    tr.appendChild(prob);
+    const td = el("td"); td.appendChild(sel); tr.appendChild(td);
+    tb.appendChild(tr);
   });
 }
 
-async function accionar(id, accion) {
-  try { await api("/incidente/accion", { incidente_id: id, accion: accion }); log(`${accion} -> ${id}`); setTimeout(cargar, 1500); }
-  catch (e) { alert(e.message); }
+// ---------- Feed en vivo ----------
+const COLOR_EVENTO = { ANTENA: "#D99A00", INCIDENTE: "#C8102E", ACCION_REQUERIDA: "#00788A", RECURRENCIA: "#DD5F1A" };
+function agregarEvento(texto, tipo) {
+  const feed = document.getElementById("feed");
+  if (feed.firstChild && feed.firstChild.classList && feed.firstChild.classList.contains("sub")) feed.replaceChildren();
+  const ev = el("div", null, "evento nuevo"); ev.style.setProperty("--c", COLOR_EVENTO[tipo] || "#00788A");
+  const cuerpo = el("div"); cuerpo.appendChild(el("div", new Date().toLocaleTimeString("es-PE"), "hora")); cuerpo.appendChild(el("div", texto));
+  ev.appendChild(cuerpo);
+  feed.prepend(ev);
+  while (feed.children.length > 40) feed.lastChild.remove();
 }
-
-function log(texto) { const f = document.getElementById("feed"); f.prepend(el("div", `${new Date().toLocaleTimeString()}  ${texto}`)); }
+function describirEvento(e) {
+  if (e.tipo === "ANTENA") return `${e.antena_id} pasó a ${nombreEstado(e.estado).toLowerCase()} con ${e.gb} GB/min`;
+  if (e.tipo === "INCIDENTE") return `${NOMBRES[e.zona_id] || e.zona_id}: incidente ${e.incidente_id} ${nombreEstado(e.estado).toLowerCase()}${e.prioridad ? ", prioridad " + e.prioridad.toLowerCase() : ""}`;
+  if (e.tipo === "ACCION_REQUERIDA") return `${e.incidente_id} espera tu decisión: ${e.fase === "VERIFICACION" ? "confirmar o descartar la falla" : "marcar como resuelto"}`;
+  if (e.tipo === "RECURRENCIA") return `${e.antena_id} falló ${e.fallas} veces en 7 días: requiere revisión técnica`;
+  return JSON.stringify(e);
+}
 
 function conectarWS() {
   const ws = new WebSocket(C.WS_URL);
-  const estado = document.getElementById("wsEstado");
-  ws.onopen = () => { estado.textContent = "conectado"; estado.className = "badge NORMAL"; };
-  ws.onclose = () => { estado.textContent = "reconectando"; estado.className = "badge SATURADA"; setTimeout(conectarWS, 3000); };
-  let pendiente;
+  const est = document.getElementById("wsEstado");
+  ws.onopen = () => { est.textContent = "En vivo"; est.className = "badge vivo"; };
+  ws.onclose = () => { est.textContent = "Reconectando"; est.className = "badge muerto"; setTimeout(conectarWS, 3000); };
   ws.onmessage = (m) => {
     const e = JSON.parse(m.data);
-    log(`${e.tipo} ${e.incidente_id || e.antena_id || ""} ${e.estado || e.fase || ""} ${e.zona_id || ""}`);
-    clearTimeout(pendiente); pendiente = setTimeout(cargar, 800);
+    agregarEvento(describirEvento(e), e.tipo);
+    if (e.tipo === "INCIDENTE" && e.estado === "DETECTADO") toast(`Nuevo incidente en ${NOMBRES[e.zona_id] || e.zona_id}`, "#C8102E");
+    if (e.tipo === "ACCION_REQUERIDA") toast(`${e.incidente_id} espera tu decisión`, "#00788A");
+    programarRecarga(800);
   };
+}
+
+// ---------- Carga de datos ----------
+function programarRecarga(ms) { clearTimeout(recarga); recarga = setTimeout(cargar, ms); }
+async function cargar() {
+  try {
+    const [ji, ja, jr] = await Promise.all([api("/incidente/listar"), api("/antena/listar"), api("/reporte/listar")]);
+    const incidentes = ji.incidentes, antenas = ja.antenas, reportes = jr.reportes;
+    actualizarKpis(antenas, incidentes, reportes);
+    dibujarMapa(antenas, incidentes);
+    actualizarGraficos(antenas, incidentes);
+    dibujarIncidentes(incidentes);
+    dibujarReportes(reportes);
+    document.getElementById("actualizado").textContent = "Actualizado " + new Date().toLocaleTimeString("es-PE");
+  } catch (e) { toast("No se pudieron cargar los datos: " + e.message, "#C8102E"); }
 }
 
 function iniciar() {
   document.getElementById("login").classList.add("oculto");
   document.getElementById("panel").classList.remove("oculto");
-  cargar().catch(e => log("Error: " + e.message));
-  conectarWS();
-  setInterval(() => cargar().catch(() => {}), 30000);
+  document.getElementById("salir").classList.remove("oculto");
+  prepararMapa(); prepararGraficos();
+  post("/zona/listar").then(j => j.zonas.forEach(z => NOMBRES[z.zona_id] = z.nombre)).catch(() => {});
+  cargar(); conectarWS();
+  setInterval(cargar, 20000);  // el simulador envia metricas cada minuto
 }
 if (token) iniciar();
 </script>
