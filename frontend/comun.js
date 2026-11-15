@@ -120,8 +120,8 @@ function lineaTiempo(historial) {
 // Mapa base oscuro (CARTO + OpenStreetMap)
 function crearMapa(id, zoom = 12) {
   const mapa = L.map(id, { zoomControl: true, attributionControl: true }).setView(CENTRO_LIMA, zoom);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19, attribution: "&copy; OpenStreetMap &copy; CARTO"
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(mapa);
   return mapa;
 }
