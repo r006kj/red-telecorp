@@ -1,0 +1,7 @@
+[
+  {"name": "antena_id", "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "zona_id",   "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "ts",        "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "gb_min",    "type": "FLOAT",     "mode": "NULLABLE"},
+  {"name": "estado",    "type": "STRING",    "mode": "NULLABLE"}
+]
