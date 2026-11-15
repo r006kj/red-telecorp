@@ -13,9 +13,13 @@ secreto = {
     'project_id': variables['GCP_PROJECT_ID'],
     'topic': variables['PUBSUB_TOPIC'],
     'clasificador_url': variables['CLASIFICADOR_URL'],
-    'clasificador_api_key': variables['CLASIFICADOR_API_KEY'],
-    'service_account': json.loads((raiz / 'gcp-key.json').read_text())
+    'clasificador_api_key': variables['CLASIFICADOR_API_KEY']
 }
+# La clave de service account ya no hace falta: Cloud Run publica en Pub/Sub por nosotros.
+# Se sigue admitiendo por si alguna vez se vuelve al envio directo desde Lambda.
+clave = raiz / 'gcp-key.json'
+if clave.exists():
+    secreto['service_account'] = json.loads(clave.read_text())
 nombre = stage + '-secreto_gcp'
 secretsmanager = boto3.client('secretsmanager', region_name='us-east-1')
 try:

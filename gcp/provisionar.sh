@@ -9,7 +9,6 @@ REGION="${REGION:-us-central1}"
 DATASET="telecorp"
 TOPIC="telecorp-eventos"
 SUSCRIPCION="telecorp-eventos-bq"
-SA_AWS="telecorp-aws"
 SA_RUN="telecorp-clasificador"
 SERVICIO="clasificador-reporte"
 API_KEY="${API_KEY:-$(openssl rand -hex 16)}"
@@ -48,27 +47,24 @@ gcloud pubsub subscriptions create "$SUSCRIPCION" \
   --use-table-schema \
   --drop-unknown-fields 2>/dev/null || echo "    (ya existia)"
 
-echo "==> 6/8 Cuenta de servicio que usaran los Lambda de AWS"
-gcloud iam service-accounts create "$SA_AWS" --display-name="Publicador desde AWS" 2>/dev/null || true
-gcloud projects add-iam-policy-binding "$PROYECTO" \
-  --member="serviceAccount:${SA_AWS}@${PROYECTO}.iam.gserviceaccount.com" \
-  --role=roles/pubsub.publisher --condition=None >/dev/null
-if [ ! -f "$RAIZ/gcp-key.json" ]; then
-  gcloud iam service-accounts keys create "$RAIZ/gcp-key.json" \
-    --iam-account="${SA_AWS}@${PROYECTO}.iam.gserviceaccount.com"
-  echo "    clave escrita en gcp-key.json (NO subir a GitHub)"
-fi
+echo "==> 6/8 Cuenta de servicio de Cloud Run"
+# No se crean claves de service account: muchas organizaciones lo prohiben por politica
+# (constraints/iam.disableServiceAccountKeyCreation) y, sobre todo, mover un JSON de
+# credenciales entre nubes es justo lo que no queremos. Cloud Run publica en Pub/Sub
+# con su propia identidad y AWS solo necesita una API key.
+gcloud iam service-accounts create "$SA_RUN" --display-name="Puente y clasificador" 2>/dev/null || true
+for ROL in roles/aiplatform.user roles/pubsub.publisher; do
+  gcloud projects add-iam-policy-binding "$PROYECTO" \
+    --member="serviceAccount:${SA_RUN}@${PROYECTO}.iam.gserviceaccount.com" \
+    --role="$ROL" --condition=None >/dev/null
+done
 
-echo "==> 7/8 Cloud Run: clasificador con Gemini"
-gcloud iam service-accounts create "$SA_RUN" --display-name="Clasificador Gemini" 2>/dev/null || true
-gcloud projects add-iam-policy-binding "$PROYECTO" \
-  --member="serviceAccount:${SA_RUN}@${PROYECTO}.iam.gserviceaccount.com" \
-  --role=roles/aiplatform.user --condition=None >/dev/null
+echo "==> 7/8 Cloud Run: clasificador con Gemini + puente a Pub/Sub"
 gcloud run deploy "$SERVICIO" \
   --source="$RAIZ/gcp/clasificador" \
   --region="$REGION" \
   --service-account="${SA_RUN}@${PROYECTO}.iam.gserviceaccount.com" \
-  --set-env-vars="GCP_PROJECT_ID=${PROYECTO},VERTEX_REGION=${REGION},VERTEX_MODEL=${VERTEX_MODEL:-gemini-2.5-flash},API_KEY=${API_KEY}" \
+  --set-env-vars="GCP_PROJECT_ID=${PROYECTO},VERTEX_REGION=${REGION},VERTEX_MODEL=${VERTEX_MODEL:-gemini-2.5-flash},API_KEY=${API_KEY},PUBSUB_TOPIC=${TOPIC}" \
   --allow-unauthenticated \
   --min-instances=0 \
   --max-instances=5 \
@@ -88,6 +84,7 @@ echo
 echo "LISTO."
 echo "  Topic        : $TOPIC  ->  $PROYECTO:$DATASET.eventos"
 echo "  Clasificador : $URL"
+echo "  Puente       : $URL/eventos  (sin claves: Cloud Run publica con su identidad)"
 echo
 echo "Prueba el clasificador:"
 echo "  curl -s -X POST '$URL' -H 'Content-Type: application/json' -H 'X-Api-Key: $API_KEY' \\"

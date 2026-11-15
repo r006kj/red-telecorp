@@ -12,7 +12,7 @@ credenciales guardadas en AWS Secrets Manager.
 | Pub/Sub `telecorp-eventos` | recibe cada cambio de incidentes y reportes |
 | BigQuery `telecorp.eventos` | historico, alimentado por suscripcion nativa (sin codigo) |
 | BigQuery `telecorp.telemetria` | serie de trafico por antena, para el modelo |
-| Cloud Run `clasificador-reporte` | Gemini clasifica la descripcion del usuario |
+| Cloud Run `clasificador-reporte` | dos rutas: `/` clasifica con Gemini, `/eventos` publica en Pub/Sub |
 | BigQuery ML `modelo_trafico` | predice la caida de una antena antes del umbral |
 | Looker Studio | panel sobre las vistas |
 
@@ -24,21 +24,33 @@ Todo corre en **Google Cloud Shell** (ya trae `gcloud` y `bq`, no hay que instal
 git clone https://github.com/r006kj/red-telecorp.git && cd red-telecorp
 gcloud config set project TU_PROYECTO
 
-bash gcp/provisionar.sh          # ~8 min: APIs, BigQuery, Pub/Sub, Cloud Run, credenciales
+bash gcp/provisionar.sh          # ~8 min: APIs, BigQuery, Pub/Sub, Cloud Run
 python gcp/sembrar_historico.py  # ~1 min: 30 dias de telemetria simulada
 bq query --use_legacy_sql=false < gcp/modelo_prediccion.sql   # ~4 min: entrena ARIMA
 bq query --use_legacy_sql=false < gcp/vistas_looker.sql       # ~10 s: vistas del panel
 ```
 
-`provisionar.sh` deja dos archivos en la raiz: `gcp-key.json` y `gcp-salida.env`.
-Descargalos y llevalos a la maquina que tiene credenciales de AWS:
+`provisionar.sh` deja un archivo en la raiz: `gcp-salida.env`.
+Llevalo a la maquina que tiene credenciales de AWS:
 
 ```bash
 python scripts/crear-secreto.py dev     # desde la raiz del repo
 cd api-telecorp && npx serverless deploy --stage dev
 ```
 
-Ninguno de los dos archivos se sube a GitHub (estan en `.gitignore`).
+Ese archivo no se sube a GitHub (esta en `.gitignore`).
+
+## Por que no hay claves de service account
+
+Las organizaciones suelen bloquear su creacion (`constraints/iam.disableServiceAccountKeyCreation`),
+pero mas alla de la politica, mover un JSON de credenciales de Google hacia AWS es la parte
+mas fragil de cualquier integracion multinube: no caduca, no se revoca facil y viaja por
+canales que nadie controla.
+
+En su lugar, Cloud Run hace de puente. Lambda le manda las filas a `/eventos` con una API key
+propia, y Cloud Run las publica en Pub/Sub usando su identidad de GCP, que nunca sale del
+proyecto. Si la API key se filtra, se rota con un redespliegue y no da acceso a nada mas
+que a ese endpoint.
 
 ## Panel de Looker Studio
 
@@ -50,6 +62,11 @@ Ninguno de los dos archivos se sube a GitHub (estan en `.gitignore`).
 ## Verificacion rapida
 
 ```bash
+# el puente publica en Pub/Sub
+curl -s -X POST "$CLASIFICADOR_URL/eventos" -H 'Content-Type: application/json' \
+  -H "X-Api-Key: $CLASIFICADOR_API_KEY" \
+  -d '{"filas":[{"evento_id":"prueba-1","tabla":"incidentes","zona_id":"Z-ATE"}]}'
+
 # el clasificador responde
 curl -s -X POST "$CLASIFICADOR_URL" -H 'Content-Type: application/json' \
   -H "X-Api-Key: $CLASIFICADOR_API_KEY" \

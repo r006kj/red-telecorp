@@ -1,2 +1,1 @@
-google-auth==2.*
 requests==2.*

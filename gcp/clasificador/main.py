@@ -4,6 +4,7 @@ Entrada : POST {"descripcion": "...", "tipoDeclarado": "SIN_SERVICIO"} + header 
 Salida  : {"categoria": "...", "resumen": "..."}  (200)
           Si Gemini no responde se devuelve 502 y el Lambda de AWS usa el tipo del formulario.
 """
+import base64
 import json
 import os
 import urllib.error
@@ -17,6 +18,7 @@ TIPOS = ['SIN_SERVICIO', 'INTERNET_LENTO', 'LLAMADAS', 'SMS', 'COBERTURA', 'OTRO
 REGION = os.environ.get('VERTEX_REGION', 'us-central1')
 MODELO = os.environ.get('VERTEX_MODEL', 'gemini-2.5-flash')
 API_KEY = os.environ.get('API_KEY', '')
+TOPIC = os.environ.get('PUBSUB_TOPIC', 'telecorp-eventos')
 
 INSTRUCCION = (
     'Eres el clasificador de incidencias de una empresa de telecomunicaciones en Peru. '
@@ -98,6 +100,34 @@ def clasificar():
     if categoria not in TIPOS:
         categoria = tipo_declarado
     return jsonify({'categoria': categoria, 'resumen': salida.get('resumen', '')}), 200
+
+
+@app.post('/eventos')
+def eventos():
+    """Puente AWS -> Pub/Sub. Lambda manda las filas y este servicio las publica con
+    sus propias credenciales, asi ninguna clave de Google sale del proyecto."""
+    if API_KEY and request.headers.get('X-Api-Key') != API_KEY:
+        return jsonify({'error': 'no autorizado'}), 401
+    filas = (request.get_json(silent=True) or {}).get('filas') or []
+    if not filas:
+        return jsonify({'publicados': 0}), 200
+    url = ('https://pubsub.googleapis.com/v1/projects/' + proyecto()
+           + '/topics/' + TOPIC + ':publish')
+    publicados = 0
+    try:
+        for i in range(0, len(filas), 100):
+            lote = filas[i:i + 100]
+            mensajes = [{'data': base64.b64encode(json.dumps(f).encode()).decode()} for f in lote]
+            peticion = urllib.request.Request(
+                url, data=json.dumps({'messages': mensajes}).encode(), method='POST',
+                headers={'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json'})
+            with urllib.request.urlopen(peticion, timeout=15) as r:
+                r.read()
+            publicados += len(lote)
+    except Exception as e:
+        print('No se pudo publicar en Pub/Sub:', repr(e))
+        return jsonify({'error': 'pubsub no disponible', 'publicados': publicados}), 502
+    return jsonify({'publicados': publicados}), 200
 
 
 @app.get('/salud')

@@ -1,4 +1,3 @@
-import base64
 import boto3
 import json
 import os
@@ -7,7 +6,6 @@ from boto3.dynamodb.types import TypeDeserializer
 from utils import ahora_iso, limpiar, secreto_gcp
 
 deserializador = TypeDeserializer()
-_credenciales = None
 
 
 def plano(imagen):
@@ -34,32 +32,21 @@ def a_fila(origen, tipo_cambio, d, evento_id):
     return {k: v for k, v in fila.items() if v is not None}
 
 
-def token_gcp(cuenta):
-    global _credenciales
-    from google.auth.transport.requests import Request
-    from google.oauth2 import service_account
-    if _credenciales is None:
-        _credenciales = service_account.Credentials.from_service_account_info(
-            cuenta, scopes=['https://www.googleapis.com/auth/pubsub'])
-    if not _credenciales.valid:
-        _credenciales.refresh(Request())
-    return _credenciales.token
-
-
 def publicar_pubsub(filas):
+    """Envia las filas al puente en Cloud Run, que las publica en Pub/Sub.
+    No se transporta ninguna credencial de Google hacia AWS: solo una API key propia."""
     configuracion = secreto_gcp()
-    if not configuracion.get('service_account'):
-        print('Sin credencial de GCP: solo se respalda en S3')
+    base = configuracion.get('clasificador_url')
+    if not base:
+        print('Sin URL de GCP: solo se respalda en S3')
         return
-    url = ('https://pubsub.googleapis.com/v1/projects/' + configuracion['project_id'] + '/topics/'
-           + configuracion['topic'] + ':publish')
-    token = token_gcp(configuracion['service_account'])
-    for i in range(0, len(filas), 100):
-        mensajes = [{'data': base64.b64encode(json.dumps(f).encode()).decode()} for f in filas[i:i + 100]]
-        peticion = urllib.request.Request(url, data=json.dumps({'messages': mensajes}).encode(), method='POST',
-                                          headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
-        with urllib.request.urlopen(peticion, timeout=10) as r:
-            r.read()
+    peticion = urllib.request.Request(
+        base.rstrip('/') + '/eventos',
+        data=json.dumps({'filas': filas}).encode(), method='POST',
+        headers={'Content-Type': 'application/json',
+                 'X-Api-Key': configuracion.get('clasificador_api_key', '')})
+    with urllib.request.urlopen(peticion, timeout=20) as r:
+        r.read()
 
 
 def lambda_handler(event, context):
