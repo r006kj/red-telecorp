@@ -1,0 +1,621 @@
+org: rafaellacano
+service: api-telecorp
+
+plugins:
+  - serverless-step-functions
+
+custom:
+  pythonRequirements:
+    pythonBin: ${env:PYTHON_BIN, 'python3'}
+    dockerizePip: false
+    slim: true
+
+provider:
+  name: aws
+  runtime: python3.13
+  region: us-east-1
+  # Default memory size for functions (default: 1024MB)
+  memorySize: 1024
+  timeout: 20
+  logRetentionInDays: 7
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+  environment:
+    TABLA_ZONAS: ${sls:stage}-t_zonas
+    TABLA_ANTENAS: ${sls:stage}-t_antenas
+    TABLA_REPORTES: ${sls:stage}-t_reportes
+    TABLA_INCIDENTES: ${sls:stage}-t_incidentes
+    TABLA_HISTORIAL: ${sls:stage}-t_historial
+    TABLA_CORRELACION: ${sls:stage}-t_correlacion
+    TABLA_CONEXIONES: ${sls:stage}-t_conexiones
+    COLA_DATOS_URL:
+      Ref: ColaDatos
+    COLA_REPORTES_URL:
+      Ref: ColaReportes
+    SF_INCIDENTE_COLECTIVO: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${sls:stage}-sf_incidente_colectivo
+    SF_RECURRENCIA: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${sls:stage}-sf_recurrencia
+    FN_CORRELACIONAR: ${self:service}-${sls:stage}-correlacionar
+    SECRETO_GCP: ${sls:stage}-secreto_gcp
+    SECRETO_CORREO: ${sls:stage}-secreto_correo
+    BUCKET_DATOS: ${sls:stage}-telecorp-datos-${aws:accountId}
+    UMBRAL_USUARIOS: "10"
+    UMBRAL_RECURRENCIA: "3"
+    SIM_PROB_FALLA: "0"
+    WS_ENDPOINT:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: WebsocketsApi
+          - ".execute-api.${aws:region}.amazonaws.com/${sls:stage}"
+
+package:
+  patterns:
+    - "!node_modules/**"
+    - "!.serverless/**"
+    - "!package*.json"
+    - "!**/__pycache__/**"
+
+functions:
+  # ---------- Antenas ----------
+  simular:
+    handler: simular_antenas.lambda_handler
+    events:
+      - schedule:
+          rate: rate(1 minute)
+          enabled: ${strToBool(${param:simulador, 'true'})}
+  procesar:
+    handler: procesar_antena.lambda_handler
+    events:
+      - eventBridge:
+          pattern:
+            source:
+              - telecorp.antenas
+            detail-type:
+              - MetricaTrafico
+  clasificar:
+    handler: clasificar_antena.lambda_handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [ColaDatos, Arn]
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
+          maximumConcurrency: 2
+
+  # ---------- Reportes (publico) ----------
+  crearReporte:
+    handler: crear_reporte.lambda_handler
+    events:
+      - http:
+          path: /reporte/crear
+          method: post
+          cors: true
+          integration: lambda
+  consultarReporte:
+    handler: consultar_reporte.lambda_handler
+    events:
+      - http:
+          path: /reporte/consultar
+          method: post
+          cors: true
+          integration: lambda
+  listarZonas:
+    handler: listar_zonas.lambda_handler
+    events:
+      - http:
+          path: /zona/listar
+          method: post
+          cors: true
+          integration: lambda
+  extraerDatos:
+    handler: extraer_datos.lambda_handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [ColaReportes, Arn]
+          batchSize: 5
+          functionResponseType: ReportBatchItemFailures
+          maximumConcurrency: 2
+  correlacionar:
+    handler: correlacionar_reportes.lambda_handler
+
+  # ---------- Tareas de Step Functions ----------
+  sfVerificar:
+    handler: sf_verificar.lambda_handler
+  sfPrioridad:
+    handler: sf_prioridad.lambda_handler
+  sfNotificar:
+    handler: sf_notificar.lambda_handler
+    timeout: 60
+  sfEsperar:
+    handler: sf_esperar.lambda_handler
+  sfCerrar:
+    handler: sf_cerrar.lambda_handler
+  sfContarFallas:
+    handler: sf_contar_fallas.lambda_handler
+  sfMarcarEstructural:
+    handler: sf_marcar_estructural.lambda_handler
+
+  # ---------- Operador (Cognito) ----------
+  listarIncidentes:
+    handler: listar_incidentes.lambda_handler
+    events:
+      - http:
+          path: /incidente/listar
+          method: post
+          cors: true
+          integration: lambda
+          authorizer: { type: COGNITO_USER_POOLS, authorizerId: { Ref: ApiAuthorizer } }
+  accionIncidente:
+    handler: accion_incidente.lambda_handler
+    events:
+      - http:
+          path: /incidente/accion
+          method: post
+          cors: true
+          integration: lambda
+          authorizer: { type: COGNITO_USER_POOLS, authorizerId: { Ref: ApiAuthorizer } }
+  listarReportes:
+    handler: listar_reportes.lambda_handler
+    events:
+      - http:
+          path: /reporte/listar
+          method: post
+          cors: true
+          integration: lambda
+          authorizer: { type: COGNITO_USER_POOLS, authorizerId: { Ref: ApiAuthorizer } }
+  actualizarReporte:
+    handler: actualizar_reporte.lambda_handler
+    events:
+      - http:
+          path: /reporte/actualizar
+          method: post
+          cors: true
+          integration: lambda
+          authorizer: { type: COGNITO_USER_POOLS, authorizerId: { Ref: ApiAuthorizer } }
+  listarAntenas:
+    handler: listar_antenas.lambda_handler
+    events:
+      - http:
+          path: /antena/listar
+          method: post
+          cors: true
+          integration: lambda
+          authorizer: { type: COGNITO_USER_POOLS, authorizerId: { Ref: ApiAuthorizer } }
+  simularAntena:
+    handler: simular_antena.lambda_handler
+    events:
+      - http:
+          path: /antena/simular
+          method: post
+          cors: true
+          integration: lambda
+          authorizer: { type: COGNITO_USER_POOLS, authorizerId: { Ref: ApiAuthorizer } }
+
+  # ---------- Panel en tiempo real (WebSocket) ----------
+  wsConectar:
+    handler: ws_conectar.lambda_handler
+    events:
+      - websocket: { route: $connect }
+  wsDesconectar:
+    handler: ws_desconectar.lambda_handler
+    events:
+      - websocket: { route: $disconnect }
+  wsDefault:
+    handler: ws_default.lambda_handler
+    events:
+      - websocket: { route: $default }
+
+  # ---------- Exportacion a S3 y GCP ----------
+  exportar:
+    handler: exportar_eventos.lambda_handler
+    timeout: 60
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt: [TablaIncidentes, StreamArn]
+          batchSize: 25
+          startingPosition: LATEST
+          maximumRetryAttempts: 3
+          bisectBatchOnFunctionError: true
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt: [TablaReportes, StreamArn]
+          batchSize: 25
+          startingPosition: LATEST
+          maximumRetryAttempts: 3
+          bisectBatchOnFunctionError: true
+
+stepFunctions:
+  validate: true
+  stateMachines:
+    incidenteColectivo:
+      name: ${sls:stage}-sf_incidente_colectivo
+      role: arn:aws:iam::${aws:accountId}:role/LabRole
+      definition:
+        Comment: Verifica, prioriza, notifica y cierra un incidente de zona
+        StartAt: VerificarInfraestructura
+        States:
+          VerificarInfraestructura:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfVerificar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+            ResultPath: $.verificacion
+            Retry: &reintentos
+              - ErrorEquals: [Lambda.ServiceException, Lambda.AWSLambdaException, Lambda.SdkClientException, Lambda.TooManyRequestsException]
+                IntervalSeconds: 2
+                MaxAttempts: 3
+                BackoffRate: 2
+            Next: CalcularPrioridad
+          CalcularPrioridad:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfPrioridad, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+            ResultPath: $.prioridad
+            Retry: *reintentos
+            Next: NotificarEnEvaluacion
+          NotificarEnEvaluacion:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfNotificar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+              tipo: EN_EVALUACION
+            ResultPath: null
+            Retry: *reintentos
+            Next: FallaEnInfraestructura
+          FallaEnInfraestructura:
+            Type: Choice
+            Choices:
+              - Variable: $.verificacion.falla_infra
+                BooleanEquals: true
+                Next: NotificarIdentificada
+            Default: EsperarVerificacionOperador
+          EsperarVerificacionOperador:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke.waitForTaskToken
+            Parameters:
+              FunctionName:
+                Fn::GetAtt: [sfEsperar, Arn]
+              Payload:
+                incidente_id.$: $.incidente_id
+                fase: VERIFICACION
+                token.$: $$.Task.Token
+            TimeoutSeconds: 86400
+            ResultPath: $.verificacion_operador
+            Catch:
+              - ErrorEquals: [States.Timeout]
+                ResultPath: $.error
+                Next: Descartar
+            Next: OperadorConfirma
+          OperadorConfirma:
+            Type: Choice
+            Choices:
+              - Variable: $.verificacion_operador.confirmado
+                BooleanEquals: true
+                Next: NotificarIdentificada
+            Default: Descartar
+          NotificarIdentificada:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfNotificar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+              tipo: INCIDENCIA_IDENTIFICADA
+            ResultPath: null
+            Retry: *reintentos
+            Next: EsperarResolucion
+          EsperarResolucion:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke.waitForTaskToken
+            Parameters:
+              FunctionName:
+                Fn::GetAtt: [sfEsperar, Arn]
+              Payload:
+                incidente_id.$: $.incidente_id
+                fase: RESOLUCION
+                token.$: $$.Task.Token
+            TimeoutSeconds: 604800
+            ResultPath: $.resolucion
+            Catch:
+              - ErrorEquals: [States.Timeout]
+                ResultPath: $.error
+                Next: CerrarVencido
+            Next: NotificarRestablecido
+          NotificarRestablecido:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfNotificar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+              tipo: RESTABLECIDO
+            ResultPath: null
+            Retry: *reintentos
+            Next: CerrarResuelto
+          CerrarResuelto:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfCerrar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+              resultado: CERRADO
+            Retry: *reintentos
+            End: true
+          Descartar:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfCerrar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+              resultado: DESCARTADO
+            Retry: *reintentos
+            End: true
+          CerrarVencido:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfCerrar, Arn]
+            Parameters:
+              incidente_id.$: $.incidente_id
+              resultado: VENCIDO
+            Retry: *reintentos
+            End: true
+
+    recurrencia:
+      name: ${sls:stage}-sf_recurrencia
+      role: arn:aws:iam::${aws:accountId}:role/LabRole
+      definition:
+        Comment: Detecta antenas con fallas repetidas (problema estructural)
+        StartAt: ContarFallas
+        States:
+          ContarFallas:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfContarFallas, Arn]
+            Retry: *reintentos
+            Next: EsRecurrente
+          EsRecurrente:
+            Type: Choice
+            Choices:
+              - Variable: $.fallas
+                NumericGreaterThanEqualsPath: $.umbral
+                Next: MarcarProblemaEstructural
+            Default: SinRecurrencia
+          MarcarProblemaEstructural:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sfMarcarEstructural, Arn]
+            Retry: *reintentos
+            End: true
+          SinRecurrencia:
+            Type: Succeed
+
+resources:
+  Resources:
+    # ---------- DynamoDB ----------
+    TablaZonas:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_ZONAS}
+        AttributeDefinitions:
+          - AttributeName: zona_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: zona_id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        BillingMode: PAY_PER_REQUEST
+    TablaAntenas:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_ANTENAS}
+        AttributeDefinitions:
+          - AttributeName: antena_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: antena_id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        BillingMode: PAY_PER_REQUEST
+    TablaReportes:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_REPORTES}
+        AttributeDefinitions:
+          - AttributeName: reporte_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: reporte_id
+            KeyType: HASH
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        BillingMode: PAY_PER_REQUEST
+    TablaIncidentes:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_INCIDENTES}
+        AttributeDefinitions:
+          - AttributeName: incidente_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: incidente_id
+            KeyType: HASH
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        BillingMode: PAY_PER_REQUEST
+    TablaHistorial:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_HISTORIAL}
+        AttributeDefinitions:
+          - AttributeName: entidad_id
+            AttributeType: S
+          - AttributeName: fecha
+            AttributeType: S
+        KeySchema:
+          - AttributeName: entidad_id
+            KeyType: HASH
+          - AttributeName: fecha
+            KeyType: RANGE
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        BillingMode: PAY_PER_REQUEST
+    TablaCorrelacion:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_CORRELACION}
+        AttributeDefinitions:
+          - AttributeName: zona_id
+            AttributeType: S
+          - AttributeName: usuario_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: zona_id
+            KeyType: HASH
+          - AttributeName: usuario_id
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: expira
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
+    TablaConexiones:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLA_CONEXIONES}
+        AttributeDefinitions:
+          - AttributeName: conexion_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: conexion_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+    # ---------- SQS con DLQ ----------
+    ColaDatosDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${sls:stage}-cola_datos_dlq
+        MessageRetentionPeriod: 1209600
+    ColaDatos:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${sls:stage}-cola_datos
+        VisibilityTimeout: 120
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt: [ColaDatosDLQ, Arn]
+          maxReceiveCount: 3
+    ColaReportesDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${sls:stage}-cola_reportes_dlq
+        MessageRetentionPeriod: 1209600
+    ColaReportes:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${sls:stage}-cola_reportes
+        VisibilityTimeout: 120
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt: [ColaReportesDLQ, Arn]
+          maxReceiveCount: 3
+
+    # ---------- S3 ----------
+    BucketDatos:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.BUCKET_DATOS}
+        VersioningConfiguration:
+          Status: Enabled
+
+    # ---------- Amplify Hosting (portal y panel, despliegue manual sin GitHub) ----------
+    AmplifyApp:
+      Type: AWS::Amplify::App
+      Properties:
+        Name: ${sls:stage}-telecorp-frontend
+        Platform: WEB
+    AmplifyRama:
+      Type: AWS::Amplify::Branch
+      Properties:
+        AppId:
+          Fn::GetAtt: [AmplifyApp, AppId]
+        BranchName: ${sls:stage}
+        Stage: DEVELOPMENT
+
+    # ---------- Cognito (operadores) ----------
+    UserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: ${sls:stage}-telecorp-operadores
+        UsernameAttributes: [email]
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: true
+    UserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: ${sls:stage}-telecorp-panel
+        UserPoolId:
+          Ref: UserPool
+        GenerateSecret: false
+        ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+    ApiAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: cognito-operadores
+        Type: COGNITO_USER_POOLS
+        IdentitySource: method.request.header.Authorization
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ProviderARNs:
+          - Fn::GetAtt: [UserPool, Arn]
+
+    # CORS tambien cuando API Gateway responde un error (token invalido, etc.)
+    GatewayResponse4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+    GatewayResponse5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+
+  Outputs:
+    UserPoolId:
+      Value:
+        Ref: UserPool
+    UserPoolClientId:
+      Value:
+        Ref: UserPoolClient
+    AmplifyAppId:
+      Value:
+        Fn::GetAtt: [AmplifyApp, AppId]
+    AmplifyUrl:
+      Value:
+        Fn::Join:
+          - ""
+          - - "https://${sls:stage}."
+            - Fn::GetAtt: [AmplifyApp, DefaultDomain]
+    BucketDatosNombre:
+      Value:
+        Ref: BucketDatos

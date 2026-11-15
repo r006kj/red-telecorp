@@ -1,0 +1,25 @@
+:root { --azul:#0b3d91; --gris:#f3f5f9; --borde:#d9dee8; --rojo:#c0392b; --verde:#1e8449; --ambar:#b9770e; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--gris); color:#1c2333; }
+header { background:var(--azul); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; }
+header h1 { font-size:20px; margin:0; }
+header a { color:#fff; font-size:14px; }
+main { max-width:1100px; margin:20px auto; padding:0 16px; }
+.tarjeta { background:#fff; border:1px solid var(--borde); border-radius:10px; padding:18px; margin-bottom:18px; }
+.tarjeta h2 { margin-top:0; font-size:17px; }
+.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+label { display:block; font-size:13px; font-weight:600; margin-bottom:4px; }
+input, select, textarea { width:100%; padding:8px; border:1px solid var(--borde); border-radius:6px; font:inherit; }
+textarea { min-height:80px; }
+button { background:var(--azul); color:#fff; border:0; border-radius:6px; padding:9px 14px; cursor:pointer; font:inherit; }
+button.sec { background:#5d6d7e; } button.ok { background:var(--verde); } button.mal { background:var(--rojo); }
+button:disabled { opacity:.5; cursor:default; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; padding:7px; border-bottom:1px solid var(--borde); vertical-align:top; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:600; background:#e5e8ee; }
+.CRITICA, .INHABILITADA { background:#f5b7b1; } .ALTA, .CAIDA { background:#fad7a0; }
+.MEDIA, .SATURADA { background:#f9e79f; } .BAJA, .NORMAL { background:#abebc6; }
+.msg { margin-top:10px; font-size:14px; } .error { color:var(--rojo); } .exito { color:var(--verde); }
+#feed { max-height:220px; overflow:auto; font-family:ui-monospace, monospace; font-size:12px; background:#0f172a; color:#d6e4ff; padding:10px; border-radius:8px; }
+.oculto { display:none; }
+ol.linea { padding-left:18px; font-size:13px; } ol.linea li { margin-bottom:4px; }

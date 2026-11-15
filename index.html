@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Red TeleCorp | Reporta una incidencia</title>
+  <link rel="stylesheet" href="estilos.css">
+  <script src="config.js"></script>
+</head>
+<body>
+<header><h1>Red TeleCorp · Incidencias</h1><a href="operador.html">Panel de operadores</a></header>
+<main>
+  <section class="tarjeta">
+    <h2>Reportar un problema con tu servicio</h2>
+    <form id="form">
+      <div class="grid">
+        <div><label>DNI</label><input name="dni" required pattern="[0-9]{8}" placeholder="12345678"></div>
+        <div><label>Nombre completo</label><input name="nombre" required></div>
+        <div><label>Número del servicio</label><input name="numero_servicio" required placeholder="987654321"></div>
+        <div><label>Correo</label><input name="email" type="email" placeholder="tu@correo.com"></div>
+        <div><label>Celular para avisos (SMS)</label><input name="telefono" placeholder="987654321"></div>
+        <div><label>Zona</label><select name="zona_id" id="zonas" required></select></div>
+        <div><label>Fecha y hora del problema</label><input name="fecha_hora" type="datetime-local" required></div>
+        <div><label>Tipo de problema</label>
+          <select name="tipo_problema" required>
+            <option value="SIN_SERVICIO">Sin servicio</option><option value="INTERNET_LENTO">Internet lento</option>
+            <option value="LLAMADAS">Llamadas</option><option value="SMS">Mensajes (SMS)</option>
+            <option value="COBERTURA">Cobertura</option><option value="OTRO">Otro</option>
+          </select></div>
+      </div>
+      <p><label>Describe lo que pasó</label><textarea name="descripcion" required maxlength="1000"></textarea></p>
+      <p><button type="button" class="sec" id="ubicacion">Usar mi ubicación aproximada</button>
+         <span id="coords" class="msg"></span></p>
+      <button type="submit">Enviar reporte</button>
+      <div id="resultado" class="msg"></div>
+    </form>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Consultar el estado de mi reporte</h2>
+    <div class="grid">
+      <div><label>Código de reporte</label><input id="cId" placeholder="REP-XXXXXXXX"></div>
+      <div><label>DNI</label><input id="cDni"></div>
+      <div style="align-self:end"><button id="consultar">Consultar</button></div>
+    </div>
+    <div id="estado" class="msg"></div>
+  </section>
+</main>
+<script>
+const API = window.CONFIG.API_URL;
+const form = document.getElementById("form");
+// Igual que el taller: integration lambda, el statusCode viene dentro del JSON
+async function post(ruta, cuerpo) {
+  const r = await fetch(`${API}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+  return r.json();
+}
+let lat = "", lon = "";
+form.fecha_hora.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+post("/zona/listar", {}).then(j => {
+  document.getElementById("zonas").innerHTML = j.zonas.map(z => `<option value="${z.zona_id}">${z.nombre}</option>`).join("");
+});
+
+document.getElementById("ubicacion").onclick = () => navigator.geolocation.getCurrentPosition(p => {
+  lat = p.coords.latitude.toFixed(4); lon = p.coords.longitude.toFixed(4);
+  document.getElementById("coords").textContent = `(${lat}, ${lon})`;
+});
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const out = document.getElementById("resultado");
+  const datos = Object.fromEntries(new FormData(form));
+  Object.assign(datos, { lat, lon });
+  out.className = "msg"; out.textContent = "Enviando...";
+  const j = await post("/reporte/crear", datos);
+  if (j.statusCode >= 400) { out.className = "msg error"; out.textContent = j.error || "Error al enviar"; return; }
+  out.className = "msg exito";
+  out.textContent = `${j.mensaje} Código: ${j.reporte_id}`;
+  document.getElementById("cId").value = j.reporte_id; document.getElementById("cDni").value = datos.dni;
+};
+
+document.getElementById("consultar").onclick = async () => {
+  const out = document.getElementById("estado");
+  const id = document.getElementById("cId").value.trim(), dni = document.getElementById("cDni").value.trim();
+  const j = await post("/reporte/consultar", { reporte_id: id, dni: dni });
+  if (j.statusCode >= 400) { out.className = "msg error"; out.textContent = j.error; return; }
+  const rep = j.reporte;
+  out.className = "msg";
+  out.replaceChildren();
+  const h = document.createElement("p");
+  h.innerHTML = `<b>Estado:</b> <span class="badge"></span> · <b>Tipo (IA):</b> <span></span> · <b>Zona:</b> <span></span>`;
+  const s = h.querySelectorAll("span"); s[0].textContent = rep.estado; s[1].textContent = rep.tipo_ia || rep.tipo_problema; s[2].textContent = rep.zona;
+  const ol = document.createElement("ol"); ol.className = "linea";
+  rep.historial.forEach(x => { const li = document.createElement("li"); li.textContent = `${x.fecha} · ${x.estado} ${x.detalle ? "— " + x.detalle : ""}`; ol.appendChild(li); });
+  out.append(h, ol);
+};
+</script>
+</body>
+</html>

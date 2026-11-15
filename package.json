@@ -1,0 +1,7 @@
+{
+  "name": "api-telecorp",
+  "private": true,
+  "devDependencies": {
+    "serverless-step-functions": "^3.31.2"
+  }
+}

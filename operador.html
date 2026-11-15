@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Red TeleCorp | Panel de operadores</title>
+  <link rel="stylesheet" href="estilos.css">
+  <script src="config.js"></script>
+</head>
+<body>
+<header><h1>Red TeleCorp · Panel de operadores</h1><a href="index.html">Portal de usuarios</a></header>
+<main>
+  <section class="tarjeta" id="login">
+    <h2>Iniciar sesión</h2>
+    <div class="grid">
+      <div><label>Correo</label><input id="usuario" type="email"></div>
+      <div><label>Contraseña</label><input id="clave" type="password"></div>
+      <div style="align-self:end"><button id="entrar">Entrar</button></div>
+    </div>
+    <div id="loginMsg" class="msg error"></div>
+  </section>
+
+  <div id="panel" class="oculto">
+    <section class="tarjeta">
+      <h2>Eventos en tiempo real <span id="wsEstado" class="badge">desconectado</span></h2>
+      <div id="feed"></div>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Incidentes de zona</h2>
+      <table><thead><tr><th>Incidente</th><th>Zona</th><th>Origen</th><th>Estado</th><th>Prioridad</th><th>Usuarios</th><th>Antena</th><th>Acción</th></tr></thead>
+        <tbody id="tIncidentes"></tbody></table>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Antenas (control de simulación)</h2>
+      <table><thead><tr><th>Antena</th><th>Zona</th><th>Estado</th><th>GB/min</th><th>Recurrencia</th><th>Forzar modo</th></tr></thead>
+        <tbody id="tAntenas"></tbody></table>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Reportes de usuarios</h2>
+      <table><thead><tr><th>Reporte</th><th>Usuario</th><th>Zona</th><th>Tipo (IA)</th><th>Resumen IA</th><th>Estado</th></tr></thead>
+        <tbody id="tReportes"></tbody></table>
+    </section>
+  </div>
+</main>
+<script>
+const C = window.CONFIG;
+let token = sessionStorage.getItem("token");
+
+// Crea elementos sin innerHTML para no inyectar texto de usuarios como HTML.
+function el(tag, texto, clase) { const e = document.createElement(tag); if (texto !== undefined && texto !== null) e.textContent = texto; if (clase) e.className = clase; return e; }
+function fila(celdas) { const tr = el("tr"); celdas.forEach(c => { const td = el("td"); if (c instanceof Node) td.appendChild(c); else td.textContent = c ?? ""; tr.appendChild(td); }); return tr; }
+function badge(v) { return el("span", v || "-", "badge " + (v || "")); }
+
+// Todas las rutas son POST con integration lambda: el statusCode viene dentro del JSON
+async function api(ruta, cuerpo = {}) {
+  const r = await fetch(`${C.API_URL}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: token }, body: JSON.stringify(cuerpo) });
+  if (r.status === 401 || r.status === 403) { sessionStorage.removeItem("token"); location.reload(); }
+  const j = await r.json();
+  if (j.statusCode >= 400 || j.message) throw new Error(j.error || j.message || "Error");
+  return j;
+}
+
+document.getElementById("entrar").onclick = async () => {
+  const msg = document.getElementById("loginMsg");
+  const r = await fetch(`https://cognito-idp.${C.REGION}.amazonaws.com/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+    body: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: C.COGNITO_CLIENT_ID,
+      AuthParameters: { USERNAME: document.getElementById("usuario").value, PASSWORD: document.getElementById("clave").value } })
+  });
+  const j = await r.json();
+  if (!j.AuthenticationResult) { msg.textContent = j.message || "No se pudo iniciar sesión"; return; }
+  token = j.AuthenticationResult.IdToken; sessionStorage.setItem("token", token); iniciar();
+};
+
+async function cargar() {
+  const [ji, ja, jr] = await Promise.all([api("/incidente/listar"), api("/antena/listar"), api("/reporte/listar")]);
+  const incidentes = ji.incidentes, antenas = ja.antenas, reportes = jr.reportes;
+
+  const ti = document.getElementById("tIncidentes"); ti.replaceChildren();
+  incidentes.forEach(i => {
+    const acciones = el("div");
+    const boton = (txt, accion, clase) => { const b = el("button", txt, clase); b.onclick = () => accionar(i.incidente_id, accion); acciones.appendChild(b); acciones.appendChild(document.createTextNode(" ")); };
+    if (i.fase === "VERIFICACION") { boton("Confirmar", "confirmar", "ok"); boton("Descartar", "descartar", "mal"); }
+    else if (i.fase === "RESOLUCION") { boton("Marcar resuelto", "resolver", "ok"); }
+    else acciones.textContent = i.fase || "—";
+    ti.appendChild(fila([i.incidente_id, i.zona_nombre, i.origen, badge(i.estado), badge(i.prioridad),
+      Math.max(i.usuarios_reportantes || 0, i.usuarios_estimados || 0), i.antena_id, acciones]));
+  });
+
+  const ta = document.getElementById("tAntenas"); ta.replaceChildren();
+  antenas.forEach(a => {
+    const sel = el("select");
+    ["normal", "caida", "saturada", "inhabilitada"].forEach(m => { const o = el("option", m); o.value = m; if (m === a.modo_simulacion) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => api("/antena/simular", { antena_id: a.antena_id, modo: sel.value }).then(() => log(`Modo de ${a.antena_id} -> ${sel.value}`));
+    ta.appendChild(fila([a.antena_id, a.zona_id, badge(a.estado), a.ultimo_gb, a.requiere_revision ? badge("CRITICA") : "—", sel]));
+    if (a.requiere_revision) ta.lastChild.children[4].firstChild.textContent = `Revisión (${a.fallas_7d} fallas/7d)`;
+  });
+
+  const tr = document.getElementById("tReportes"); tr.replaceChildren();
+  reportes.slice(0, 100).forEach(r => {
+    const sel = el("select");
+    ["REGISTRADA", "EN_REVISION", "EN_ATENCION", "SOLUCIONADA", "CERRADA"].forEach(s => { const o = el("option", s); o.value = s; if (s === r.estado) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => api("/reporte/actualizar", { reporte_id: r.reporte_id, estado: sel.value }).then(() => log(`${r.reporte_id} -> ${sel.value}`));
+    tr.appendChild(fila([r.reporte_id, `${r.nombre} (${r.dni})`, r.zona_nombre, `${r.tipo_ia} · ${r.fuente_ia}`, r.resumen_ia, sel]));
+  });
+}
+
+async function accionar(id, accion) {
+  try { await api("/incidente/accion", { incidente_id: id, accion: accion }); log(`${accion} -> ${id}`); setTimeout(cargar, 1500); }
+  catch (e) { alert(e.message); }
+}
+
+function log(texto) { const f = document.getElementById("feed"); f.prepend(el("div", `${new Date().toLocaleTimeString()}  ${texto}`)); }
+
+function conectarWS() {
+  const ws = new WebSocket(C.WS_URL);
+  const estado = document.getElementById("wsEstado");
+  ws.onopen = () => { estado.textContent = "conectado"; estado.className = "badge NORMAL"; };
+  ws.onclose = () => { estado.textContent = "reconectando"; estado.className = "badge SATURADA"; setTimeout(conectarWS, 3000); };
+  let pendiente;
+  ws.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    log(`${e.tipo} ${e.incidente_id || e.antena_id || ""} ${e.estado || e.fase || ""} ${e.zona_id || ""}`);
+    clearTimeout(pendiente); pendiente = setTimeout(cargar, 800);
+  };
+}
+
+function iniciar() {
+  document.getElementById("login").classList.add("oculto");
+  document.getElementById("panel").classList.remove("oculto");
+  cargar().catch(e => log("Error: " + e.message));
+  conectarWS();
+  setInterval(() => cargar().catch(() => {}), 30000);
+}
+if (token) iniciar();
+</script>
+</body>
+</html>
