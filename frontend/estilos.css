@@ -88,6 +88,7 @@ button.chico { padding: 5px 11px; font-size: 14px; }
 #mapa { height: 440px; border-radius: 4px; border: 1px solid var(--linea); }
 #mapaReporte { height: 250px; border-radius: 4px; border: 1px solid var(--linea); }
 .leaflet-container { font-family: var(--texto); background: #EEF2F5; }
+.leaflet-tile-pane { filter: saturate(.5) contrast(.95) brightness(1.03); }
 .leyenda { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .pulso { animation: pulsar 1.6s ease-in-out infinite; }
 @keyframes pulsar { 50% { opacity: .45; } }
