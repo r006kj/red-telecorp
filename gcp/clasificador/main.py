@@ -84,7 +84,7 @@ def preguntar_a_gemini(descripcion, tipo_declarado):
     }
     peticion = urllib.request.Request(
         url, data=json.dumps(cuerpo).encode(), method='POST', headers=cabeceras)
-    with urllib.request.urlopen(peticion, timeout=6) as r:
+    with urllib.request.urlopen(peticion, timeout=20) as r:
         respuesta = json.loads(r.read())
     texto = respuesta['candidates'][0]['content']['parts'][0]['text']
     return json.loads(texto)
